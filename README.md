@@ -1,212 +1,334 @@
-# SeeIt AI
+# VTrace
 
-面向长视频内容理解的 Video Agent 平台。SeeIt AI 将视频转写、关键证据和用户目标组织成可追溯的结构化分析报告。
+集成视频上传、语音转写、画面文字识别与 AI 分析的长视频内容理解平台。用户可以上传本地视频或导入公开 B 站视频，按目标生成带时间戳证据的分析报告，并围绕原视频继续追问。
 
-- 在线体验：[https://seeitai.online](https://seeitai.online)
-- API 健康检查：[https://seeitai.online/api/health](https://seeitai.online/api/health)
-- MCP Streamable HTTP：`https://seeitai.online/mcp`（需要网站用户 Bearer Token）
+项目采用 **Vue 3 + Spring Boot + FastAPI** 混合后端架构：Java 承担分析任务的业务入口，Python 保留视频处理、Agent 编排和检索能力，通过共享数据库与 RocketMQ 协作。
 
-公网演示环境未配置真实模型和 ASR 密钥时使用 Mock Provider，用于验证完整业务、异步任务和工具调用链路，不代表真实模型准确率。
+## 核心功能
 
-## 核心能力
+- **视频接入**：分片上传、断点查询、用户级 MD5 内容去重；支持 BV 号预览与公开视频异步导入。
+- **内容提取**：faster-whisper 提取语音时间轴，PaddleOCR 识别关键帧文字，统一保存为 ASR/OCR 证据片段。
+- **目标驱动分析**：LangGraph 编排计划、证据检索、核验、报告生成与审查，输出可追溯的引用和时间戳。
+- **视频追问**：持久化会话与短期记忆，追问时重新检索原始视频证据，支持刷新后恢复报告与对话。
+- **异步任务**：展示任务状态、处理阶段、进度和工具调用 Trace，支持失败重试与重复任务防护。
+- **用户隔离**：JWT 登录认证，按用户校验视频、任务和会话的访问权限。
+- **工具扩展**：提供 MCP 工具、资源模板，以及课程笔记、会议复盘、操作指南和证据审计 Skill。
 
-- JWT 登录与用户资源隔离
-- 大文件分片上传、断点查询与 MD5 内容指纹
-- BV 号元数据预览、公开 B 站视频异步导入与来源追踪；预览优先使用官方公开 API，下载保留 `yt-dlp` 并提供 DASH 音视频回退
-- 分片原子写入、用户级内容去重和上传异常恢复
-- MySQL 持久化与 Redis 重复任务锁
-- RocketMQ 异步分析任务与独立 Worker
-- FFmpeg 音频提取、`faster-whisper base/int8` 本地 ASR、远程 ASR 兼容和 PaddleOCR 关键帧证据
-- 可替换的 AI Provider 与离线 Mock 演示
-- LangGraph 结构化 Agent 图：事实题由 LLM Planner 生成证据槽位；视频总结走确定性代表性时间轴采样；Verifier 区分直接证据、综合概括、有依据推断和无答案，Writer 使用 Evidence ID 成文，独立 Critic 检查完整性、矛盾、外部推断和拒答
-- Coverage-Aware Agentic RAG：lexical + 本地 BGE dense + RRF，并对多问句、枚举和分别题建立证据需求计划、分需求检索、邻接扩展与充分性门禁
-- Qdrant 持久化向量索引，按视频和 ASR/OCR 来源过滤，支持快照复用、变化重建、媒体删除清理和故障降级
-- 合成/真实检索评测集，输出 Recall@K、MRR、多证据完整命中、无答案误召回、延迟和逐题结果
-- 模型工具调用与离线确定性工具流水线，统一执行元数据、时间轴检索、证据窗口、引用校验和报告生成
-- 动态分析计划、逐工具 Trace、图执行元数据、证据引用评估、继续追问和任务状态查询
-- 按用户/视频/目标隔离的 Agent 短期记忆，持久化追问会话；每次追问会重新检索原始 ASR/OCR，而不是只依赖上一份报告；有依据推断强制标注“视频没有明确说明”；关闭侧栏或刷新页面后可恢复报告与对话，主页视频卡片展示会话摘要
-- 带用户 Token 隔离的 SeeIt MCP Server，提供 14 个工具和 4 个资源模板
-- 课程笔记、会议复盘、操作指南和证据审计 4 个可复用 Agent Skill
-- Alembic 数据库迁移、失败重试、重复消息幂等和 Pytest 接口测试
+## 技术栈
 
-## 架构
+| 模块 | 核心技术 | 职责 |
+| --- | --- | --- |
+| 前端 | Vue 3、Vite（rolldown-vite）、Axios、Marked | 上传、任务交互、进度轮询、报告与对话展示 |
+| Java 后端 | Java 21、Spring Boot 3.5、MyBatis、Spring Data Redis | 任务创建、权限校验、事务持久化、消息投递、按任务 ID 查询状态与报告 |
+| Python 后端 | FastAPI、Uvicorn、SQLAlchemy、Alembic | 用户认证、视频接入、AI 接口、会话管理和数据库迁移 |
+| 数据与消息 | MySQL、Redis、RocketMQ 4.9.4 | 业务持久化、防重与限流、异步任务传递 |
+| 视频处理 | PyAV、faster-whisper、PaddleOCR、yt-dlp | 视频校验、音频提取、抽帧、ASR/OCR 与公开视频导入 |
+| Agent 与模型 | LangGraph、OpenAI-compatible API | 结构化分析与模型调用，示例配置使用 DeepSeek |
+| 检索增强 | 词法检索、BGE ONNX Embedding、RRF、Qdrant | 视频证据的词法、向量与混合检索 |
+| 部署与测试 | Docker Compose、Nginx、Caddy、JUnit/Mockito、pytest、Node Test Runner | 服务编排、代理、HTTPS 与分层回归测试 |
+
+视频校验、音频提取和 OCR 抽帧已使用 PyAV；Docker 镜像仍安装 FFmpeg，供公开视频下载等工具使用。Qdrant 是可配置的检索后端，可切换为无需向量服务的词法检索。
+
+## 系统架构
 
 ```text
-Vue 3 前端（Vite / Nginx）
-    |-- Spring Boot：任务创建 / 按 ID 查询状态和报告
-    |      `-- 共享 MySQL / Redis / RocketMQ
-    |
-FastAPI API 服务：登录 / 上传 / 追问 / AI 工具 / 原任务接口回退
-    |-- MySQL：用户 / 视频 / 上传会话 / 导入任务 / 分析任务
-    |-- Redis：活跃任务锁
-    |-- RocketMQ：分析任务消息
-    |-- Qdrant：视频证据向量 / Payload Filter / 持久化索引
-    |-- 共享媒体存储
-    |
-RocketMQ Worker
-    |-- yt-dlp 公开视频导入 / FFmpeg / faster-whisper base
-    |-- PaddleOCR 隔离子进程 / ASR-OCR 时间轴融合
-    |-- LangGraph Structured Planner / Evidence Ledger / Verifier / Writer / Critic
-    |-- Coverage-Aware Retriever / Contextual Hybrid / Qdrant / 真实检索评测
-    |-- AI Provider（模型工具调用或离线工具流水线）
-    `-- 结构化证据报告
+浏览器 / Vue 3
+      |
+      +-- /business-api --> Spring Boot
+      |                       |-- JWT / 资源归属 / 参数校验
+      |                       |-- MyBatis + MySQL：创建任务、查询状态与报告
+      |                       |-- Redis：活跃任务防重、限流、撤销记录
+      |                       `-- RocketMQ Producer
+      |
+      `-- /api -----------> FastAPI
+                              |-- 注册登录、上传、BV 导入
+                              |-- 报告恢复、追问、会话与 Agent 工具
+                              `-- 原分析接口，供显式回退及 Python 客户端使用
 
-MCP Server
-    |-- Bearer Token 转发与用户隔离
-    |-- 14 个视频工具 / 4 个资源模板
-    `-- Codex / Claude / 其他 MCP 客户端
+RocketMQ --> Python Worker
+                 |-- 视频处理、faster-whisper、PaddleOCR
+                 |-- 证据检索：词法 / BGE + Qdrant 混合检索
+                 |-- LangGraph + AI Provider
+                 `-- 更新共享 MySQL：进度、报告、错误与 Trace
+
+MCP 客户端 --> MCP Server --> FastAPI（转发用户 Bearer Token）
 ```
 
-## 快速启动
+Java、Python API 和 Worker 复用现有 MySQL、Redis 与消息协议；Java 模块没有新增数据库表，也不执行 ASR/OCR 或重写 Python Worker。
 
-前端现默认将 `/analysis/ai`、`/analysis/task-status` 交给 Spring Boot 业务模块，
-上传、ASR/OCR、LangGraph、RAG、追问和 MCP 保留在 Python。Vite/Nginx 按前缀代理，
-数据库和消息协议不变。设置前端 `VITE_ANALYSIS_BACKEND=python` 并重启/重新构建可
-回退原 FastAPI。详见 [前端说明](./client/README.md) 与
-[整体联调记录](./business-backend/FRONTEND_VALIDATION.md)。
+### 分析任务调用链
 
-需要 Docker Desktop。
+1. 前端通过 Python 完成视频上传或导入，取得视频 ID。
+2. 前端向 Java 提交视频 ID 与分析目标；Java 校验登录身份、资源归属和参数。
+3. Redis 活跃任务锁配合 MySQL `active_key` 唯一约束防重。MyBatis 在同一事务内插入 `analysis_tasks` 并更新视频状态。
+4. 数据库事务提交后，Java 向 RocketMQ 发送任务消息。
+5. Python Worker 消费消息，通过条件更新领取任务，提取或复用证据，再执行 AI 分析并更新数据库。
+6. 前端轮询 Java 状态接口，完成后展示报告；追问继续调用 Python。
 
-```bash
-docker compose up --build
+消息格式保持一致：
+
+```text
+Topic：video-analysis-topic（可通过 ROCKETMQ_TOPIC 配置）
+Tag：analysis
+Key：taskId
+Body：{"type":"analysis","taskId":"任务 UUID"}
 ```
 
-本地 Compose 默认由 Worker 启用 `faster-whisper base/int8`、PaddleOCR 和 Contextual Qdrant Hybrid Retrieval。首次使用会把约 141 MB 的 ASR 模型、约 21 MB 的 `PP-OCRv5_mobile_det/rec` 模型和约 23 MB 的 INT8 BGE ONNX 模型下载到独立 `seeit_models` volume，后续启动及重复检索复用缓存；Qdrant 索引保存在独立 `seeit_qdrant` volume。ASR 完成后会释放 Whisper 模型，再由 OCR 子进程执行推理，规避 Paddle oneDNN 的线程限制并控制内存峰值。
+任务状态主要为 `QUEUED → PROCESSING → COMPLETED`；可重试异常进入 `RETRYING`，达到次数上限后进入 `FAILED`。默认最多尝试 3 次，部分 Agent 质量门禁错误会直接结束任务。消费端利用任务状态条件更新避免重复领取正在处理或已结束的任务。
 
-根目录 `.env.example` 已预置 DeepSeek OpenAI-compatible 配置，复制为 `.env` 后手动填写新生成的 `AI_API_KEY` 即可启用 `deepseek-v4-flash`；密钥为空时使用确定性 Mock Provider。
-
-API 默认地址：`http://localhost:9090`
-
-OpenAPI 文档：`http://localhost:9090/docs`
-
-MCP Streamable HTTP 地址：`http://localhost:8001/mcp`
-
-前端需要 Node.js 22+：
-
-```bash
-cd client
-npm install
-npm run dev
-```
-
-前端默认访问 `http://localhost:9090`，页面地址为 `http://localhost:5173`。
-
-前端采用面向视频分析工作台的 Soft UI 视觉系统。设计令牌、组件状态、响应式规则和新增功能检查清单见 [前端 Soft UI 设计与开发规范](./docs/前端Soft-UI设计与开发规范.md)。新增页面或组件前应先阅读该文档，避免引入与现有主题冲突的颜色、阴影和交互规则。
-
-GitHub 提交、本地 Compose 构建、Docker Hub/GHCR 镜像发布和服务器更新的完整命令见 [GitHub 与 Docker 发布指南](./docs/GitHub与Docker发布指南.md)。
-
-## 本地后端开发
-
-推荐 Python 3.11+。
-
-```bash
-cd backend
-python -m venv .venv
-# Windows 激活虚拟环境
-.venv\Scripts\activate
-pip install -r requirements.txt
-copy .env.example .env
-python -m alembic upgrade head
-uvicorn seeit.main:app --reload --port 9090
-```
-
-直接运行 Python 后端时，本地 ASR 默认关闭，可在 `.env` 中设置 `LOCAL_ASR_ENABLED=true`；也可以配置 OpenAI 兼容的远程 ASR。没有配置真实 LLM 时，报告生成使用确定性的抽取式 Mock Provider，但时间轴证据仍可来自真实本地 ASR。完整配置见 [backend/.env.example](./backend/.env.example)。
-
-## MCP Server 与 Skills
-
-MCP Server 支持远程 Streamable HTTP 和本地 stdio。HTTP 模式直接使用网站登录后获得的 JWT Bearer Token，因此 MCP 只能访问该用户自己的视频。Docker 启动后连接 `http://localhost:8001/mcp`；服务器部署地址为 `https://你的域名/mcp`。
-
-本地 stdio 模式：
-
-```bash
-cd backend
-# PowerShell：将网站登录接口返回的 token 仅放入当前终端环境变量
-$env:SEEIT_MCP_TOKEN="你的用户令牌"
-$env:SEEIT_API_URL="http://127.0.0.1:9090"
-python -m seeit.mcp_server --transport stdio
-```
-
-仓库中的 Skills 位于 [`skills/`](./skills/)，分别处理课程笔记、会议复盘、操作指南和证据审计。每个 Skill 都声明 `seeit-ai` MCP 依赖，并规定证据不足、任务未完成和引用校验失败时的处理方式。
-
-## 测试
-
-```bash
-cd backend
-pytest -q
-```
-
-最近一次完整后端回归为 `106 passed, 2 skipped`；两个 skip 是需要外部 Qdrant 服务条件的集成项。覆盖上传与鉴权、任务重试、ASR/OCR、Retriever Profile、Qdrant 运行/降级、离线评测、结构化 Agent 槽位、代表性视频总结、Grounded Inference 提示、Verifier 审计、Critic 有界收尾和 EvalOps 指标。
-
-证据 RAG 基线命令：
-
-```bash
-cd backend
-python scripts/evaluate_evidence_rag.py
-```
-
-合成基线使用 9 条 ASR/OCR 片段，Top-3 的 Recall@3、MRR 和 Hit Rate 均为 1.0。V1 真实集包含 2 条视频和 16 道人工标注问题，当前只作为开发集调试时间指代、邻接扩展和拒答阈值；此前的 2 视频 12 题已用于方案选择，也不再是严格未见留出集。评测统一输出 Recall@1/3/8、MRR、多证据完整命中、ASR/OCR 分项、无答案正检索率和延迟。
-
-离线 A/B 与生产运行使用同一个固定版本的本地 BGE；模型文件不提交仓库、不打入镜像，由运行时下载到模型 volume：
-
-```bash
-cd backend
-pip install -r requirements-eval.txt
-python scripts/evaluate_retrieval_ab.py \
-  --dataset evals/heldout_retrieval_eval.json \
-  --snapshot /path/to/heldout-evidence-snapshots.json \
-  --output /path/to/heldout-retrieval-ab.json \
-  --model-dir /path/to/bge-small-zh-v1.5 \
-  --allow-model-download
-```
-
-模型固定为 `Xenova/bge-small-zh-v1.5` 的 revision `75c43b069aac4d136ba6bc1122f995fedcfd2781` 和 INT8 ONNX 文件。V1 开发集加入 Contextual 策略后，Recall@8 从 `0.8667` 提升到 `1.0000`，多证据完整命中率从 `0.8000` 提升到 `1.0000`；这些数字只代表开发集调参结果。最终未见留出集（2 条新视频、14 题，其中 9 道可回答）上，lexical 的 MRR/Recall@8 为 `0.5972/0.7778`，Hybrid 与 Contextual/Qdrant 的 MRR/Recall@8 为 `0.7222/0.7778`，Hybrid 相对 lexical 的 MRR 绝对提升 `0.1250`；dense 的 Recall@8 最高为 `0.8333`，但早期排序较差。Qdrant 已作为可选持久化后端接入，最终集与内存 Contextual 的质量指标一致，查询均值约 `12.51 ms`，说明它解决的是持久化、Payload Filter 和跨进程访问，不是自动的准确率提升。
-
-最终未见留出集还暴露出明确边界：7/9 道可回答题在 Qdrant Contextual Profile 下命中，2 道多证据题未完整召回；5 道不可回答题全部产生正检索，abstention precision/recall/F1 均为 `0`。11 段金标证据在 ASR/OCR 快照中全部存在，因此本轮失败属于检索覆盖/拒答泛化问题，不是证据抽取缺失。最终留出集只用于一次冻结验证，不能据此继续调参。
-
-随后只使用 V1 16 题与此前 12 题作为开发数据实现 `coverage-aware-qdrant-hybrid-v2`。在旧 12 题开发集上，相对 legacy Contextual，MRR `0.8500 -> 0.8750`、Recall@8 `0.7750 -> 1.0000`、多证据完整命中@8 `0.7000 -> 1.0000`，2 道不可回答题均拒答且没有可回答题误拒；平均查询耗时约 `8.20 -> 14.96 ms`。V1 开发集质量指标保持 MRR `0.8633`、Recall@8/完整命中@8 `1.0000`，查询均值约 `7.37 -> 8.83 ms`。这些都是经过多轮规则调整的开发集结果，最终 14 题没有重跑，不能声称新策略已经泛化。
-
-开发/生产示例现在默认 `coverage-aware-qdrant-hybrid-v2`；需要回滚时可将 `EVIDENCE_RETRIEVER_PROFILE` 改回 `contextual-qdrant-hybrid-v1`。新 Profile 对普通模型名的 ASR/OCR 变体保留语义候选，只在当前视频缺少领域锚点、比较对象或全大写关键缩写时直接拒答，并把 `coveragePlan/evidenceSufficiency` 交给 LangGraph 收尾门禁。
-
-Coverage-Aware v2 随后在另一组冻结最终未见集（2 条新视频、16 题，其中 11 道可回答、5 道不可回答）上只运行一次。282 段 ASR/OCR 快照中的金标抽取覆盖率为 `1.0000`，但 lexical 的 MRR/Recall@8 为 `0.5682/0.6818`，Coverage-Aware 与 Qdrant Coverage 只有 `0.4651/0.5909`；11 道可回答题中 6 道完整命中，5 道不可回答题均未在检索层拒答。开发集上的提升没有泛化，`fullyCovered` 还错误地把每道可回答题都视为单一且已满足的 requirement。真实 DeepSeek 只做预算受控抽样：7/16 题完成、人工语义复核 3/7 通过，40 次请求累计 408,045 Token 后停止。该最终集已封存，不用于后续调参或重跑。
-
-默认 Agent 已升级为 `video-evidence-agent-v5.2-grounded-synthesis`。v5.2 保留 v5.1 的结构化槽位、Evidence Ledger、Verifier 审计和 Critic 有界收尾；同时将“视频主要讲了什么/总结视频”等开放式概括路由到单个 `SYNTHESIS + REPRESENTATIVE` 槽位，按时间轴均匀抽取最多 18 条 ASR/OCR，避免把时间戳或行动建议错误扩张成必须事实槽位。Verifier 的 `supportLevel` 区分 `DIRECT/SYNTHESIS/GROUNDED_INFERENCE/NONE`：仅由视频证据可推出的答案允许回答，但程序强制追加“视频没有明确说明”；完全没有证据的精确事实仍拒答。追问会重新检索原始时间轴，避免上一份拒答报告导致后续永久失去视频上下文。可通过 `AGENT_PIPELINE_VERSION=legacy-v4` 回滚旧工具循环。
-
-在完全相同的两段合成证据和比较问题上，真实 DeepSeek v4/v5 均 4 次请求且回答正确；v5 Prompt Token `7802 -> 4018`、Total Token `8459 -> 4828`，分别下降约 `48.5%/42.9%`，Tool Call `5 -> 4`，总 Provider 延迟 `7127 -> 7422 ms`。这是单次开发冒烟，不是性能压测；v4 有 6528 Cache Hit Token 而 v5 首次运行无缓存，且费用单价未配置，不能据此宣称实际账单下降。另一个“标题相关但未给答案”的合成场景中，v5 以 4 次请求、4062 Token 完成零引用明确拒答。
-
-在允许调参的 V1 两视频 16 题开发集上，v5.1 全量运行达到 `16/16` 任务完成、`9/16` 保守字符串规则命中、引用支持率 `1.0`，87 次 Provider 请求累计 158,894 Token；没有基础设施、限流或 Agent 未收尾失败。后续定向修复了技术名保留和单目标顺序题，但没有再次运行完整 16 题，因此不得把局部结果外推为新的全量准确率。残余失败主要来自 OCR 价格抽取错误、`token/Qwen/关羽` 被 ASR 识别为“偷懒/千万/关于”后的跨片段实体恢复，以及 Verifier 偶发结构化布尔值与说明文字冲突。V1 是开发集，不代表最终未见泛化；Coverage-Aware v2 最终集继续冻结且未重跑。
-
-## 服务器部署
-
-项目提供面向 `4 核 8 GB` 单机的本地 ASR/OCR 生产模板，完整运行 MySQL、Redis、RocketMQ、Qdrant、API、Worker、MCP、前端 Nginx 和 Caddy HTTPS。Worker 默认限制为 `2.5 GiB` 并串行处理任务，Qdrant 限制为 `768 MiB`；`2 核 8 GB` 也能运行单用户演示，但数分钟视频的 CPU 处理时间会明显增加。生产环境只对公网开放 `80/443`，数据库、缓存、消息队列、Qdrant 和 API 均位于 Docker 内部网络。
-
-```bash
-cp deploy/.env.production.example deploy/.env.production
-# 修改域名、数据库密码、Redis 密码和 JWT_SECRET
-docker compose --env-file deploy/.env.production -f docker-compose.prod.yml config --quiet
-docker compose --env-file deploy/.env.production -f docker-compose.prod.yml up -d --build
-```
-
-详细的域名解析、安全组、首次启动、更新、备份和排错步骤见 [deploy/README.md](./deploy/README.md)。
-
-生产模式会强制检查 MySQL、Alembic、CORS 和 JWT 密钥配置；上传或 BV 导入完成后使用 FFprobe 校验真实视频轨道与时长，并对登录、上传、导入和分析接口执行限流。BV 导入只接受固定格式的 BV 号并构造 Bilibili 官方视频地址，不接受任意 URL。
+MQ 发送异常或超时时，Java 保留已落库任务，返回 `202` 和 `dispatchStatus=PENDING`，由已运行的 Python Worker 排队任务 watchdog 兜底。**这不是数据库与 MQ 的原子事务，也不是 Outbox 或 Exactly Once 方案。** Worker 无法启动时，任务需要等待依赖恢复。
 
 ## 项目结构
 
 ```text
-backend/                       Python/FastAPI 后端与 MCP Server
-business-backend/              Spring Boot/MyBatis 任务创建与状态查询
-backend/alembic/               数据库迁移脚本
-client/                        Vue 3 前端
-skills/                        4 个 SeeIt Agent Skill
-docker-compose.yml             MySQL、Redis、RocketMQ、Qdrant、API、Worker 与 MCP
-docker-compose.prod.yml        4 核 8 GB 本地 ASR 服务器生产编排
-deploy/                        HTTPS、生产环境模板、备份与部署文档
+VTrace/
+├── business-backend/          Java 业务模块
+│   ├── src/main/java/        Controller / Service / Mapper、认证、Redis、MQ
+│   ├── src/main/resources/   Spring Boot 配置
+│   ├── src/test/             单元与 MySQL/Redis 集成测试
+│   └── scripts/              Python 样例、隔离 Broker 与链路验证脚本
+├── backend/
+│   ├── seeit/                FastAPI、Worker、Agent、检索、OCR、MCP
+│   ├── alembic/              现有数据库迁移
+│   ├── tests/                Python 回归测试
+│   ├── evals/                检索与 Agent 评测数据
+│   └── scripts/              离线评测脚本
+├── client/                   Vue 3 前端、代理配置与接口测试
+├── skills/                   视频分析场景的 MCP Skill
+├── deploy/                   生产配置、Caddy、备份与部署脚本
+├── docs/                     设计与发布文档
+├── .github/workflows/        CI：Python、Java、前端与部署配置检查
+├── docker-compose.yml        本地基础服务与后端编排
+└── docker-compose.prod.yml   包含前端和 HTTPS 入口的生产编排
 ```
 
-## 后续改进
+部分包名、数据库名和配置仍沿用 `seeit` / `SeeIt AI`，以兼容现有实现。
 
-1. 不再使用 Coverage-Aware v2 最终集调参；以 V1、旧 12 题、合成/变形测试和线上 shadow case 扩充 Planner/Verifier 回归。
-2. 为 Evidence Ledger 增加跨片段关系类型与更严格的枚举完备性校验，但继续限制最多 6 个槽位和 18 条压缩证据。
-3. 在真实任务 Trace 中长期观察 `byPhase` Token、上下文字符数、修订率和拒答率；费用门禁为可选评测参数，默认 Provider 调用不设总预算。
-4. 暂不引入 Reranker；当前先验证槽位规划、充分性和 Critic 是否在 shadow case 中稳定。
-5. 在 GitHub Actions 中增加真实 Qdrant/MySQL/Redis/RocketMQ 集成测试与 Agent 契约回归。
+## 本地快速启动
+
+推荐使用 Compose 启动基础设施与后端，在宿主机运行 Vue 开发服务器。
+
+### 1. 准备环境
+
+- Docker Engine 或 Docker Desktop，以及 Docker Compose v2；Windows 使用 Linux 容器。
+- Node.js 22+ 与 npm。
+- 当前 Python Dockerfile 使用 Linux amd64 的 RocketMQ C++ 客户端安装包，其他架构需要适配。
+
+```bash
+git clone https://github.com/mo1946/VTrace.git
+cd VTrace
+cp .env.example .env
+```
+
+PowerShell 可用 `Copy-Item .env.example .env` 代替 `cp`。已有 `.env` 时保留自己的配置。
+
+### 2. 配置 AI 模型
+
+在根目录 `.env` 中填写：
+
+```dotenv
+AI_BASE_URL=https://api.deepseek.com
+AI_API_KEY=你的模型服务密钥
+AI_MODEL=deepseek-v4-flash
+```
+
+`AI_MODEL` 应使用你的服务账号实际支持的模型名称，也可改为其他兼容 OpenAI 接口的模型服务。密钥为空时，后端使用确定性 `MockProvider`，适合验证任务与页面流程；Mock 输出不能作为真实模型分析效果。
+
+Compose 的 Worker 默认启用本地 Whisper ASR 和 PaddleOCR，首次启动或使用时需要下载模型。模型及上传文件分别保存在 Docker volume 中，后续复用缓存。
+
+### 3. 启动后端与依赖
+
+```bash
+docker compose config --quiet
+docker compose up -d --build
+docker compose ps
+```
+
+该配置启动 MySQL、Redis、RocketMQ NameServer/Broker、Qdrant、FastAPI、Spring Boot、Worker 和 MCP，**不包含前端服务**。API 入口脚本执行 `alembic upgrade head`，Java 不负责创建或修改表结构。
+
+查看初始化与任务日志：
+
+```bash
+docker compose logs -f api business-backend worker
+```
+
+### 4. 启动前端
+
+在另一个终端执行：
+
+```bash
+cd client
+npm ci
+npm run dev
+```
+
+| 入口 | 默认地址 |
+| --- | --- |
+| Vue 页面 | http://localhost:5173 |
+| Python 健康检查 | http://localhost:9090/health |
+| Python OpenAPI 文档 | http://localhost:9090/docs |
+| Java 业务接口 | http://127.0.0.1:8080 |
+| MCP Streamable HTTP | http://localhost:8001/mcp |
+
+Java 接口需要 Python 登录签发的 Bearer Token，当前未集成 Swagger UI。先在页面注册并登录，再上传视频、创建分析任务和追问。访问 `http://localhost:5173/?demo` 可查看不依赖后端的内置界面演示。
+
+开发 Compose 使用固定的本地数据库与 JWT 配置，仅用于本地开发；服务器部署使用生产模板。
+
+## 配置与本地开发
+
+### 配置作用范围
+
+| 文件或配置 | 作用 |
+| --- | --- |
+| 根目录 `.env` | 开发 Compose 变量插值，只有 Compose 引用的变量会进入容器 |
+| `backend/.env` | 直接启动 Python 时使用，可从 `backend/.env.example` 复制 |
+| `client/.env.local` | 前端与 Vite 配置，可从 `client/.env.example` 复制 |
+| `deploy/.env.production` | 生产 Compose 配置，从生产示例复制并替换密码、域名等 |
+| Java 进程环境变量 | Spring Boot 读取，不会自动加载根目录或 Python 的 `.env` |
+
+真实 `.env`、令牌和模型权重不提交仓库。修改 Compose 环境变量后，需重新执行 `docker compose up -d` 更新容器；修改 `VITE_*` 后需重启开发服务器或重新构建前端。
+
+### 关键配置
+
+| 配置 | 说明 |
+| --- | --- |
+| `DATABASE_URL` / `VTRACE_DB_URL` | Python SQLAlchemy URL / Java JDBC URL，必须连接同一 MySQL 数据库 |
+| `JWT_SECRET` | Java 与 Python 必须一致，否则用户令牌无法跨后端验证 |
+| `REDIS_URL` | Java、API 与 Worker 共用的 Redis 地址 |
+| `ROCKETMQ_NAMESERVER` / `ROCKETMQ_TOPIC` | 生产者与消费者使用一致的 NameServer 和 Topic |
+| `UPLOAD_ROOT` | Python API 与 Worker 必须访问同一份视频文件 |
+| `LOCAL_ASR_ENABLED` / `ASR_BASE_URL` | 本地 ASR 开关 / 远程 ASR 地址；直接运行 Python 的示例默认关闭本地 ASR |
+| `OCR_ENABLED` | 是否执行画面文字识别 |
+| `EVIDENCE_RETRIEVER_PROFILE` | 默认 `coverage-aware-qdrant-hybrid-v2`；`coverage-aware-lexical-v3` 可使用词法检索 |
+| `EVIDENCE_RETRIEVAL_FALLBACK_ENABLED` | 启用时，Qdrant/向量检索故障可降级到词法检索 |
+| `VALIDATE_VIDEO_CONTENT` / `MAX_VIDEO_DURATION_SECONDS` | 上传视频内容校验开关及启用校验后的时长上限；生产示例启用校验，上限为 900 秒 |
+| `BILIBILI_MAX_DURATION_SECONDS` | BV 导入的时长上限，示例为 900 秒；面向长视频理解不代表无限时长 |
+
+开发 Compose 中部分参数直接写在服务定义里，例如 Worker 的 ASR/OCR 开关；只修改根 `.env` 中同名变量不一定生效，需要核对 Compose 的实际引用。
+
+### 单独调试服务
+
+- **Java**：需要 JDK 21、Maven 和已完成原 Alembic 迁移的 MySQL。配置 `VTRACE_DB_URL`、`VTRACE_DB_USERNAME`、`VTRACE_DB_PASSWORD`、共享 `JWT_SECRET`、Redis 和 RocketMQ 后，在 `business-backend/` 执行 `mvn spring-boot:run`。详见 [Java 模块文档](./business-backend/README.md)。
+- **Python**：建议 Python 3.11。在 `backend/` 安装 `requirements.txt`、准备 `.env`、执行 `python -m alembic upgrade head`，再运行 `uvicorn seeit.main:app --reload --port 9090`。Worker 需要 `requirements-rocketmq.txt` 和 RocketMQ C++ 动态库，推荐在 Docker 或 Linux/WSL 运行 `python -m seeit.worker`。
+- **前端**：默认 `/api` 代理 Python `9090`，`/business-api` 代理 Java `8080`。可通过 `PYTHON_API_TARGET`、`BUSINESS_API_TARGET` 调整，详见 [前端文档](./client/README.md)。
+
+`backend/.env.example` 的 SQLite 配置适合独立 Python 开发；Java + Python 联调需要共享 MySQL。单独调试服务时避免与容器占用相同端口。混用宿主机、WSL 和容器时，还需确保 Broker 广播地址可被生产者和消费者同时访问。
+
+### 回退到原 Python 分析接口
+
+在 `client/.env.local` 中设置：
+
+```dotenv
+VITE_ANALYSIS_BACKEND=python
+```
+
+重启 Vite 后，任务创建和按 ID 状态查询一起切回 FastAPI。生产环境需在部署环境文件中修改该变量并重新构建前端。登录、上传、报告恢复和追问始终使用 Python。
+
+前端不会在创建任务超时后自动向另一后端重发，避免原请求已落库时再次创建任务。重复提交返回 `409`；响应带有既有 `taskId` 时，前端恢复对该任务的轮询。
+
+## 主要接口
+
+以下为服务内部路径；通过前端代理访问时，需要使用对应前缀。除注册、登录和健康检查等接口外，业务接口需要 Bearer Token。
+
+| 方法 | 路径 | 默认后端 | 作用 |
+| --- | --- | --- | --- |
+| POST | `/user/register`、`/user/login` | Python `/api` | 注册与登录 |
+| POST | `/media/init-upload`、`/media/upload-chunk`、`/media/complete-upload` | Python `/api` | 分片上传 |
+| GET | `/media/upload-status`、`/media/list` | Python `/api` | 断点查询与视频列表 |
+| POST | `/media/bilibili/preview`、`/media/bilibili/import` | Python `/api` | BV 预览与异步导入 |
+| POST | `/analysis/ai?id={mediaId}&goal={goal}` | Java `/business-api` | 创建分析任务，受理返回 `202` |
+| GET | `/analysis/task-status?taskId={taskId}` | Java `/business-api` | 查询状态、进度、错误与报告 |
+| POST | `/analysis/transcribe?id={mediaId}` | Python `/api` | 单独提取视频文字 |
+| GET | `/analysis/report`、`/analysis/agent-memory` | Python `/api` | 恢复报告与会话 |
+| POST | `/analysis/follow-up?id={mediaId}&question={question}` | Python `/api` | 基于原视频继续追问 |
+
+Java 两个分析接口使用与原 Python 接口兼容的参数；完整 Python 接口以运行时 `/docs` 为准。无效身份返回 `401`，跨用户查询视频或任务返回 `404`，分析请求限流返回 `429`。
+
+## 测试与验证
+
+### 常规回归
+
+准备好各模块依赖后，分别从仓库根目录进入对应目录执行：
+
+```bash
+cd backend
+python -m pytest -q
+```
+
+```bash
+cd business-backend
+mvn verify
+```
+
+```bash
+cd client
+npm test
+npm run build
+```
+
+Java 的 MySQL/Redis 集成项、Python 的外部 Qdrant 集成项和前端链路测试需要额外环境；条件未配置时部分测试会跳过。单元测试通过不能代替真实消息链路验收。
+
+### 跨语言链路与异常测试
+
+项目提供 Python ORM 样例、独立 RocketMQ Broker 和前端 API 联调脚本，用于验证：
+
+- Python 创建的任务可被 Java 读取，Java 创建的任务可被原 Worker 消费。
+- 分片上传、断点查询、内容去重、并发重复提交与事务回滚。
+- MQ 发送失败返回 `PENDING`，保留任务和防重状态。
+- 未登录与跨用户访问、任务失败重试、报告恢复、追问和 Python 回退。
+
+集成测试使用独立的 `vtrace_business_test_*` 数据库，不能对业务库运行。脚本、配置与历史验证范围见 [Java 链路记录](./business-backend/VALIDATION.md) 和 [前端整体联调记录](./business-backend/FRONTEND_VALIDATION.md)。其中的 MockProvider、ASR fixture 测试不证明真实模型效果；浏览器交互、Docker 构建及生产部署的未验证项以记录为准。
+
+### 检索与 Agent 评测
+
+`backend/evals/` 和 `backend/scripts/` 包含证据检索、真实视频及离线 A/B 评测，关注 Recall@K、MRR、多证据完整命中、拒答、延迟及 Provider Token 使用。基础证据检索评测可在 `backend/` 执行：
+
+```bash
+python scripts/evaluate_evidence_rag.py
+```
+
+真实评测还需要对应的证据快照、模型文件或服务配置。开发集效果不能外推为未见视频准确率；现有评测已暴露多证据召回、ASR/OCR 实体识别和拒答泛化的边界，Qdrant 持久化也不等于准确率自动提升。
+
+## MCP 与场景 Skill
+
+`backend/seeit/mcp_server.py` 提供 14 个工具和 4 个资源模板，支持视频列表、元数据、时间轴检索、上下文展开、引用校验、分析、报告与追问等操作。HTTP 模式使用网站用户 Bearer Token，资源权限由 Python API 校验。
+
+Compose 启动后可连接 `http://localhost:8001/mcp`。本地 stdio 模式在已安装依赖的 `backend/` 目录运行：
+
+```powershell
+$env:SEEIT_API_URL = 'http://127.0.0.1:9090'
+$env:SEEIT_MCP_TOKEN = '网站登录返回的用户令牌'
+python -m seeit.mcp_server --transport stdio
+```
+
+场景 Skill 位于 [skills/](./skills/)，客户端需要自行配置相应的 MCP 连接。MCP 当前调用原 Python API，不经前端的 Java 路由选择。
+
+## 服务器部署
+
+生产模板包含前端 Nginx、Spring Boot、Python API/Worker、MySQL、Redis、RocketMQ、Qdrant、MCP 和 Caddy HTTPS 入口。
+
+```bash
+cp deploy/.env.production.example deploy/.env.production
+# 修改域名、数据库与 Redis 密码、JWT_SECRET、模型配置等
+docker compose --env-file deploy/.env.production -f docker-compose.prod.yml config --quiet
+docker compose --env-file deploy/.env.production -f docker-compose.prod.yml up -d --build
+```
+
+需同步修改连接 URL 中的凭据，并保持 Java 与 Python 的数据库、Redis、JWT 和 Topic 配置一致。域名解析、HTTPS、持久卷备份和更新步骤见 [部署文档](./deploy/README.md)。
+
+生产模板只映射公网入口 `80/443`，基础服务位于 Compose 内部网络。当前 Worker 默认单消费线程并配置 CPU/内存上限；实际容量取决于视频长度、ASR/OCR 和模型延迟，项目尚未提供生产压测结论。
+
+## 常见问题与当前边界
+
+| 现象 | 检查方向 |
+| --- | --- |
+| 登录正常，但 Java 返回 `401` | 两端 `JWT_SECRET` 是否一致，用户表和 Redis 是否指向同一环境 |
+| 任务一直排队或显示投递待确认 | Broker、Worker 是否运行，NameServer、Topic 与 Broker 广播地址是否可达 |
+| ASR/OCR 已完成，Agent 仍失败 | 查看 Worker 日志和任务 `error`，检查模型权限、请求限制与 HTTPS 连通性 |
+| 出现 `SSL: UNEXPECTED_EOF_WHILE_READING` | 检查运行 Worker 的实际环境及 VPN/代理路由；Windows 能访问不代表 WSL/容器也能访问 |
+| 首次任务处理较慢 | 可能正在下载或加载 ASR/OCR/Embedding 模型，查看 Worker 日志并确认下载源可达 |
+| 向量检索不可用 | 检查 Qdrant 与模型文件，或使用词法 Profile；启用 fallback 时注意日志中的降级记录 |
+
+目前 Java 聚焦任务入口，登录、上传、视频导入、报告恢复和追问仍由 Python 提供。系统支持可追溯引用与证据不足时拒答，但不能保证模型输出完全正确；识别质量、跨片段实体恢复和复杂问题的证据覆盖仍需持续验证。
+
+更多模块说明：[Java 后端](./business-backend/README.md) · [Vue 前端](./client/README.md) · [前端设计规范](./docs/前端Soft-UI设计与开发规范.md)。
