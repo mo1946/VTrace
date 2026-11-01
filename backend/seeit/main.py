@@ -43,6 +43,7 @@ from seeit.bilibili import (
     normalize_bvid,
 )
 from seeit.runtime_retrieval import build_runtime_retriever, delete_runtime_media_index
+from seeit.upload_progress import UploadProgressStore
 
 load_dotenv()
 
@@ -1678,6 +1679,9 @@ def redis_client() -> Optional[redis.Redis]:
         return None
 
 
+upload_progress = UploadProgressStore(lambda: redis_client(), UPLOAD_SESSION_TTL_HOURS * 3600)
+
+
 def enforce_rate_limit(key: str, limit: int, window_seconds: int) -> None:
     """优先使用 Redis 计数；Redis 不可用时退化为单进程内存计数。"""
     redis_key = f"rate:{key}"
@@ -2122,6 +2126,8 @@ def cleanup_stale_uploads() -> None:
             shutil.rmtree(chunk_dir(session.id), ignore_errors=True)
             db.delete(session)
         db.commit()
+        for session in sessions:
+            upload_progress.clear(session.id)
         log.info("stale_upload_sessions_cleaned count=%s", len(sessions))
 
 
@@ -2357,7 +2363,7 @@ def bilibili_import_list(user: User = Depends(current_user)) -> list[dict[str, A
 @app.post("/media/init-upload")
 def init_upload(filename: str, totalChunks: int, user: User = Depends(current_user)) -> str:
     enforce_rate_limit(f"upload-init:{user.id}", 20, 3600)
-    max_chunks = max(1, MAX_UPLOAD_BYTES // MAX_CHUNK_BYTES)
+    max_chunks = max(1, (MAX_UPLOAD_BYTES + MAX_CHUNK_BYTES - 1) // MAX_CHUNK_BYTES)
     if totalChunks <= 0 or totalChunks > max_chunks:
         raise HTTPException(status_code=400, detail="totalChunks 不合法")
     upload_id = str(uuid.uuid4())
@@ -2365,22 +2371,18 @@ def init_upload(filename: str, totalChunks: int, user: User = Depends(current_us
     with SessionLocal() as db:
         db.add(UploadSession(id=upload_id, user_id=user.id, filename=safe_filename(filename), total_chunks=totalChunks))
         db.commit()
+    upload_progress.initialize(upload_id)
     return upload_id
 
 
 @app.get("/media/upload-status")
-def upload_status(uploadId: str, user: User = Depends(current_user)) -> list[int]:
+def upload_status(uploadId: str, reconcile: bool = False, user: User = Depends(current_user)) -> list[int]:
     with SessionLocal() as db:
         session = db.get(UploadSession, uploadId)
         if not session or session.user_id != user.id:
             raise HTTPException(status_code=404, detail="上传任务不存在")
-    result = []
-    for path in chunk_dir(uploadId).glob("part-*"):
-        try:
-            result.append(int(path.name.split("-")[1]))
-        except (IndexError, ValueError):
-            continue
-    return sorted(result)
+        total_chunks = session.total_chunks
+    return upload_progress.read(uploadId, chunk_dir(uploadId), total_chunks, reconcile=reconcile)
 
 
 @app.post("/media/upload-chunk")
@@ -2406,20 +2408,19 @@ async def upload_chunk(
         if session.total_chunks != totalChunks or not 0 <= chunkIndex < totalChunks:
             raise HTTPException(status_code=400, detail="分片参数不合法")
     target = chunk_dir(uploadId) / f"part-{chunkIndex}"
-    temporary_target = target.with_suffix(".uploading")
+    temporary_target = target.with_name(f".{target.name}.{uuid.uuid4().hex}.uploading")
     size = 0
-    too_large = False
-    with temporary_target.open("wb") as output:
-        while block := await file.read(1024 * 1024):
-            size += len(block)
-            if size > MAX_CHUNK_BYTES:
-                too_large = True
-                break
-            output.write(block)
-    if too_large:
+    try:
+        with temporary_target.open("wb") as output:
+            while block := await file.read(1024 * 1024):
+                size += len(block)
+                if size > MAX_CHUNK_BYTES:
+                    raise HTTPException(status_code=413, detail="分片超过大小限制")
+                output.write(block)
+        temporary_target.replace(target)
+    finally:
         temporary_target.unlink(missing_ok=True)
-        raise HTTPException(status_code=413, detail="分片超过大小限制")
-    temporary_target.replace(target)
+    upload_progress.record(uploadId, chunkIndex, chunk_dir(uploadId), totalChunks)
     return "分片上传成功"
 
 
@@ -2433,6 +2434,8 @@ def complete_upload(uploadId: str, user: User = Depends(current_user)) -> dict[s
         parts = [directory / f"part-{index}" for index in range(session.total_chunks)]
         if not all(path.is_file() for path in parts):
             raise HTTPException(status_code=400, detail="还有分片未上传")
+        if sum(path.stat().st_size for path in parts) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="视频超过大小限制")
         final_path = media_dir() / f"{uuid.uuid4()}-{session.filename}"
         temporary_path = final_path.with_suffix(final_path.suffix + ".assembling")
         with temporary_path.open("wb") as output:
@@ -2447,6 +2450,7 @@ def complete_upload(uploadId: str, user: User = Depends(current_user)) -> dict[s
                 db.delete(session)
                 db.commit()
                 shutil.rmtree(directory, ignore_errors=True)
+                upload_progress.clear(uploadId)
                 raise HTTPException(status_code=400, detail=f"视频校验失败：{exc}") from exc
         content_hash = md5_file(temporary_path)
         existing = db.scalar(select(Media).where(Media.user_id == user.id, Media.content_hash == content_hash))
@@ -2455,6 +2459,7 @@ def complete_upload(uploadId: str, user: User = Depends(current_user)) -> dict[s
             db.delete(session)
             db.commit()
             shutil.rmtree(directory, ignore_errors=True)
+            upload_progress.clear(uploadId)
             return {"mediaId": existing.id, "deduplicated": True}
         temporary_path.replace(final_path)
         media = Media(user_id=user.id, filename=session.filename, file_path=str(final_path), content_hash=content_hash)
@@ -2463,6 +2468,7 @@ def complete_upload(uploadId: str, user: User = Depends(current_user)) -> dict[s
         db.commit()
         db.refresh(media)
         shutil.rmtree(directory, ignore_errors=True)
+        upload_progress.clear(uploadId)
     return {"mediaId": media.id, "deduplicated": False}
 
 

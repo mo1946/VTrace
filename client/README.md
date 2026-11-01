@@ -17,6 +17,11 @@ npm run dev
 使用 Java；登录、上传、BV 导入、转写、报告恢复、Agent 元数据和追问继续使用 Python。
 两端须共用 MySQL、Redis、JWT_SECRET，Java 提交后仍由原 Python Worker 处理。
 
+上传按 5 MiB 分片、最多 3 片并发。单片请求对网络错误、超时、408、429、5xx 最多尝试
+3 次并退避等待，尊重 `Retry-After`；永久性错误不自动重试。续传通过本地保存的 uploadId
+调用 `/media/upload-status?uploadId=...&reconcile=true`，校准 Redis 与实际文件后只补传缺失
+分片。状态查询的暂时性错误不会删除上传会话；初始化和合并接口不自动重发。
+
 复制 `.env.example` 为 `.env.local` 后可调整：
 
 ```bash
@@ -59,7 +64,7 @@ npm run build
 
 ## 回归测试
 
-`npm test` 使用 Node 22 内置 runner，运行 6 项路由、鉴权和异常响应测试；没有独立
+`npm test` 使用 Node 22 内置 runner，运行路由、鉴权、异常响应与分片退避重试测试；没有独立
 服务配置时，两个联调测试显式跳过。没有新增测试框架依赖。
 
 `tests/integration.test.js` 执行真实 `src/api.js`，经过 Vite/Nginx，覆盖有效 MP4 分片

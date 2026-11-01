@@ -392,6 +392,7 @@ import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { marked } from 'marked'
 import { apiRequest, clearAuthToken, hasAuthToken, setAuthToken } from './api'
 import { queuedMessage } from './apiRouting.js'
+import { uploadChunkWithRetry } from './uploadChunks.js'
 import { DEMO_EVALUATION, DEMO_ITEM, DEMO_PLAN, DEMO_RESULT, DEMO_TRACE } from './demoData'
 
 // --- 变量定义 ---
@@ -561,12 +562,16 @@ const uploadFile = async () => {
     let uploadedChunks = new Set()
 
     if (uploadId) {
-      const statusRes = await apiRequest(`/media/upload-status?uploadId=${encodeURIComponent(uploadId)}`)
+      // A resume reconciles Redis with disk, including writes whose acknowledgement
+      // or Redis update was lost during a network outage.
+      const statusRes = await apiRequest(`/media/upload-status?uploadId=${encodeURIComponent(uploadId)}&reconcile=true`)
       if (statusRes.ok) {
         uploadedChunks = new Set(await statusRes.json())
-      } else {
+      } else if (statusRes.status === 404) {
         localStorage.removeItem(storageKey)
         uploadId = null
+      } else {
+        throw new Error(await statusRes.text() || '查询上传进度失败，请稍后重试')
       }
     }
 
@@ -585,21 +590,20 @@ const uploadFile = async () => {
       .filter(index => !uploadedChunks.has(index))
     let cursor = 0
     let completedChunks = uploadedChunks.size
+    let uploadError = null
 
     const uploadNext = async () => {
-      while (cursor < pendingChunks.length) {
+      while (!uploadError && cursor < pendingChunks.length) {
         const index = pendingChunks[cursor++]
-        const formData = new FormData()
-        formData.append('uploadId', uploadId)
-        formData.append('chunkIndex', String(index))
-        formData.append('totalChunks', String(totalChunks))
-        formData.append('file', selectedFile.slice(index * CHUNK_SIZE, Math.min(selectedFile.size, (index + 1) * CHUNK_SIZE)))
-
-        const chunkRes = await apiRequest('/media/upload-chunk', {
-          method: 'POST',
-          body: formData
-        })
-        if (!chunkRes.ok) throw new Error(await chunkRes.text() || `分片 ${index} 上传失败`)
+        try {
+          await uploadChunkWithRetry({
+            uploadId, index, totalChunks,
+            chunk: selectedFile.slice(index * CHUNK_SIZE, Math.min(selectedFile.size, (index + 1) * CHUNK_SIZE))
+          })
+        } catch (error) {
+          uploadError = error
+          return
+        }
         completedChunks++
         message.value = `正在上传分片 ${completedChunks}/${totalChunks}...`
       }
@@ -607,6 +611,7 @@ const uploadFile = async () => {
     await Promise.all(Array.from(
       { length: Math.min(UPLOAD_CONCURRENCY, pendingChunks.length) }, uploadNext
     ))
+    if (uploadError) throw uploadError
 
     message.value = '分片上传完成，正在合并文件...'
     const completeParams = new URLSearchParams({ uploadId })

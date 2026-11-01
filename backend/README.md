@@ -36,7 +36,7 @@ RocketMQ Python 客户端依赖本地动态库，本项目建议通过 Docker/Li
 ## 已实现能力
 
 - 使用 FastAPI 提供 REST API，通过 JWT 完成登录认证和用户资源归属校验。
-- 支持视频分片上传、缺失分片查询、原子合并、MD5 内容指纹和用户级内容去重。
+- 支持视频分片上传，使用 Redis Set 记录完整落盘的分片编号；进度查询优先读取 Redis，Redis 故障或过期时回退磁盘扫描，续传通过 `reconcile=true` 主动校准。保留流式合并、MD5 内容指纹和用户级内容去重；详细流程见根 README 的“分片上传与 Redis 进度”。
 - 从经过格式校验的 BV 号调用 B 站官方公开 API 读取元数据，并通过持久化导入任务和 RocketMQ Worker 异步下载；下载优先使用 `yt-dlp`，失败时回退 `playurl` DASH 音视频流 + FFmpeg，不接受任意 URL、登录 Cookie、付费或私密内容。
 - 使用 SQLAlchemy + Alembic 管理 MySQL/SQLite 中的用户、视频、上传会话、证据片段和分析任务。
 - 持久化分析任务状态，并通过 RocketMQ Producer/Consumer 解耦 API 与后台 Worker；重复消息通过原子抢占避免重复执行。
