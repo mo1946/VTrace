@@ -1,0 +1,12 @@
+interface:
+  display_name: "VTrace 证据审计"
+  short_description: "逐条核验 VTrace 视频报告结论、引用和原始 ASR/OCR 时间轴"
+  default_prompt: "使用 $vtrace-audit-evidence 核验指定 VTrace 视频报告，逐项说明支持程度、引用问题及建议修订。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "seeit-ai"
+      description: "VTrace 视频证据与分析工具，沿用 seeit-ai MCP 连接标识"
+      transport: "streamable_http"
+      url: "http://127.0.0.1:8001/mcp"

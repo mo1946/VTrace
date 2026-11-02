@@ -1,0 +1,12 @@
+interface:
+  display_name: "VTrace 操作指南"
+  short_description: "从 VTrace 教程视频整理前置条件、操作步骤、参数与可回看的证据"
+  default_prompt: "使用 $vtrace-extract-operation-guide 从指定 VTrace 教程视频提取有证据支持的 SOP，标出缺失参数和时间戳。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "seeit-ai"
+      description: "VTrace 视频证据与分析工具，沿用 seeit-ai MCP 连接标识"
+      transport: "streamable_http"
+      url: "http://127.0.0.1:8001/mcp"

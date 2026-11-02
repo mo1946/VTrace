@@ -1,0 +1,12 @@
+interface:
+  display_name: "VTrace 会议复盘"
+  short_description: "从 VTrace 会议视频提取决策、行动项、明确负责人和时间戳证据"
+  default_prompt: "使用 $vtrace-review-meeting 复盘指定 VTrace 会议视频，区分提议与决定，并引用行动项、负责人和期限的证据。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "seeit-ai"
+      description: "VTrace 视频证据与分析工具，沿用 seeit-ai MCP 连接标识"
+      transport: "streamable_http"
+      url: "http://127.0.0.1:8001/mcp"

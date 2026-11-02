@@ -1,0 +1,12 @@
+interface:
+  display_name: "VTrace 课程笔记"
+  short_description: "基于 VTrace 视频证据整理章节笔记、核心概念和带引用的复习题"
+  default_prompt: "使用 $vtrace-create-course-notes 为指定 VTrace 视频生成带时间戳与 ASR/OCR 依据的课程笔记。"
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "seeit-ai"
+      description: "VTrace 视频证据与分析工具，沿用 seeit-ai MCP 连接标识"
+      transport: "streamable_http"
+      url: "http://127.0.0.1:8001/mcp"

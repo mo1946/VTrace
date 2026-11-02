@@ -313,6 +313,15 @@ python -m seeit.mcp_server --transport stdio
 
 场景 Skill 位于 [skills/](./skills/)，客户端需要自行配置相应的 MCP 连接。MCP 当前调用原 Python API，不经前端的 Java 路由选择。
 
+| Skill | 用途 |
+| --- | --- |
+| [vtrace-create-course-notes](./skills/vtrace-create-course-notes/SKILL.md) | 课程章节、概念与复习题，附时间戳证据 |
+| [vtrace-review-meeting](./skills/vtrace-review-meeting/SKILL.md) | 会议决策、行动项、明确负责人和期限 |
+| [vtrace-extract-operation-guide](./skills/vtrace-extract-operation-guide/SKILL.md) | 教程步骤、参数、验证与失败排查 |
+| [vtrace-audit-evidence](./skills/vtrace-audit-evidence/SKILL.md) | 核验结论、引用与原始 ASR/OCR 证据 |
+
+Skill 目录、名称与默认调用已从 `seeit-*` 更新为 `vtrace-*`；已有客户端需同步更新对应的安装路径和调用名。`agents/openai.yaml` 中的 MCP 连接标识仍保留 `seeit-ai`，与当前服务兼容；实际连接名、地址及身份令牌按客户端配置使用。更名没有改变 `seeit://` 资源 URI、`SEEIT_*` 配置或 MCP 服务协议。
+
 ## 服务器部署
 
 生产模板包含前端 Nginx、Spring Boot、Python API/Worker、MySQL、Redis、RocketMQ、Qdrant、MCP 和 Caddy HTTPS 入口。
