@@ -1,0 +1,270 @@
+/* Scoped opt-in: upload, BV import, task cards and transcription keep their styles.
+   !important only overrides declarations in the existing theme layers. */
+.app-stage .sidebar-panel.agent-panel {
+  width: clamp(680px, 54vw, 800px) !important;
+  max-width: 96vw;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--vt-radius-panel) 0 0 var(--vt-radius-panel) !important;
+  background: var(--vt-surface) !important;
+  box-shadow: var(--vt-shadow-panel) !important;
+  font-family: var(--vt-font-sans);
+  color: var(--vt-text);
+}
+
+.app-stage .agent-panel .sidebar-header {
+  flex: 0 0 auto;
+  min-height: 80px;
+  gap: var(--vt-space-4);
+  padding: var(--vt-space-4) var(--vt-space-6);
+  background: var(--vt-surface) !important;
+  border-bottom: 1px solid var(--vt-border) !important;
+}
+.app-stage .agent-panel .sidebar-title {
+  flex: 1;
+  align-items: flex-start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 18px !important;
+  line-height: 28px;
+  font-weight: 600;
+  color: var(--vt-text) !important;
+}
+.app-stage .agent-panel .sidebar-title .icon { flex: 0 0 24px; margin-top: 2px; }
+.app-stage .agent-panel .close-btn {
+  border-radius: var(--vt-radius-control) !important;
+  background: var(--vt-surface) !important;
+  box-shadow: none !important;
+  color: var(--vt-text-muted) !important;
+}
+.app-stage .agent-panel .close-btn:hover { background: var(--vt-surface-muted) !important; }
+
+.app-stage .agent-panel .sidebar-body {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scroll-padding-block: var(--vt-space-6);
+  padding: var(--vt-space-6) var(--vt-space-8) !important;
+  background: var(--vt-surface);
+}
+.app-stage .agent-panel .sidebar-body > * { min-width: 0; }
+
+.app-stage .agent-panel .markdown-content {
+  max-width: 720px;
+  margin-inline: auto;
+  font-size: 16px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+  color: var(--vt-text) !important;
+}
+.app-stage .agent-panel .report-content {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.app-stage .agent-panel .markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  margin: var(--vt-space-8) 0 var(--vt-space-3);
+  font-family: inherit;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--vt-text) !important;
+}
+.app-stage .agent-panel .markdown-content h1 { font-size: 26px; border: 0; padding: 0; }
+.app-stage .agent-panel .markdown-content h2 {
+  margin-bottom: var(--vt-space-4);
+  padding: var(--vt-space-2) var(--vt-space-3);
+  border-left: 3px solid var(--vt-brand);
+  border-radius: 0 var(--vt-radius-sm) var(--vt-radius-sm) 0;
+  background: linear-gradient(90deg, var(--vt-brand-subtle), transparent);
+  color: var(--vt-brand-text) !important;
+  font-size: 22px;
+}
+.app-stage .agent-panel .markdown-content h3 {
+  padding-left: var(--vt-space-3);
+  border-left: 3px solid var(--vt-brand);
+  color: var(--vt-brand-text) !important;
+  font-size: 18px;
+}
+.app-stage .agent-panel .markdown-content :is(h4, h5, h6) { margin: var(--vt-space-6) 0 var(--vt-space-2); font-size: 16px; }
+.app-stage .agent-panel .markdown-content > :first-child { margin-top: 0; }
+.app-stage .agent-panel .markdown-content > :last-child { margin-bottom: 0; }
+.app-stage .agent-panel .markdown-content p { margin: 0 0 var(--vt-space-4); }
+.app-stage .agent-panel .markdown-content :is(ul, ol) { margin: 0 0 var(--vt-space-4); padding-left: var(--vt-space-6); }
+.app-stage .agent-panel .markdown-content li { margin: var(--vt-space-2) 0; color: var(--vt-text) !important; }
+.app-stage .agent-panel .markdown-content li::marker { color: var(--vt-brand-text); font-weight: 600; }
+.app-stage .agent-panel .markdown-content li li::marker { color: var(--vt-text-muted); font-weight: 400; }
+.app-stage .agent-panel .markdown-content li > :is(ul, ol) { margin-block: var(--vt-space-2); }
+.app-stage .agent-panel .markdown-content li > p { margin-bottom: var(--vt-space-2); }
+.app-stage .agent-panel .markdown-content strong { color: var(--vt-text) !important; font-weight: 700; }
+.app-stage .agent-panel .markdown-content li > strong:first-child { color: var(--vt-brand-text) !important; }
+.app-stage .agent-panel .markdown-content :is(h2, h3) strong { color: inherit !important; font-weight: inherit; }
+.app-stage .agent-panel .markdown-content a { color: var(--vt-brand-text); text-decoration: underline; text-underline-offset: 3px; }
+.app-stage .agent-panel .markdown-content blockquote {
+  margin: var(--vt-space-5) 0;
+  padding: var(--vt-space-3) var(--vt-space-4);
+  border-left: 3px solid var(--vt-brand);
+  border-radius: 0 var(--vt-radius-sm) var(--vt-radius-sm) 0;
+  background: var(--vt-bg);
+}
+.app-stage .agent-panel .markdown-content blockquote > :last-child { margin-bottom: 0; }
+.app-stage .agent-panel .markdown-content code {
+  padding: 2px 5px;
+  border-radius: var(--vt-radius-sm);
+  background: var(--vt-surface-muted);
+  font-family: var(--vt-font-mono);
+  font-size: .875em;
+}
+.app-stage .agent-panel .markdown-content pre {
+  max-width: 100%;
+  margin: var(--vt-space-5) 0;
+  padding: var(--vt-space-4);
+  overflow-x: auto;
+  white-space: pre;
+  overflow-wrap: normal;
+  border: 1px solid var(--vt-border);
+  border-radius: var(--vt-radius-control);
+  background: var(--vt-bg);
+}
+.app-stage .agent-panel .markdown-content pre code { padding: 0; background: none; }
+.app-stage .agent-panel .markdown-content table {
+  display: block;
+  max-width: 100%;
+  width: max-content;
+  overflow-x: auto;
+  margin: var(--vt-space-5) 0;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.app-stage .agent-panel .markdown-content :is(th, td) { padding: 10px 12px; border: 1px solid var(--vt-border); text-align: left; vertical-align: top; }
+.app-stage .agent-panel .markdown-content th { background: var(--vt-bg); font-weight: 600; }
+.app-stage .agent-panel .markdown-content hr { margin: var(--vt-space-6) 0; border: 0; border-top: 1px solid var(--vt-border); }
+
+.app-stage .agent-panel .conversation-history { gap: var(--vt-space-5); margin-top: var(--vt-space-8); }
+.app-stage .agent-panel .conversation-turn {
+  border: 1px solid var(--vt-border) !important;
+  border-radius: var(--vt-radius-card) !important;
+  background: var(--vt-surface) !important;
+  box-shadow: none !important;
+}
+.app-stage .agent-panel .conversation-question { padding: var(--vt-space-4); background: var(--vt-brand-subtle) !important; border-bottom-color: var(--vt-border) !important; }
+.app-stage .agent-panel .conversation-question :is(span, small) { color: var(--vt-brand-text) !important; }
+.app-stage .agent-panel .conversation-question :is(p, small) { white-space: normal; overflow-wrap: anywhere; }
+.app-stage .agent-panel .conversation-answer { padding: var(--vt-space-4); }
+
+.app-stage .agent-panel .agent-inspector {
+  margin-top: var(--vt-space-8);
+  padding: 0;
+  border: 1px solid var(--vt-border);
+  border-radius: var(--vt-radius-card);
+  background: var(--vt-bg);
+  overflow-wrap: anywhere;
+}
+.app-stage .agent-panel .agent-inspector-summary {
+  min-height: 52px;
+  padding: var(--vt-space-4);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--vt-text);
+}
+.app-stage .agent-panel .agent-inspector-summary span { margin-left: var(--vt-space-2); font-size: 13px; font-weight: 400; color: var(--vt-text-muted); }
+.app-stage .agent-panel .agent-inspector[open] > summary { margin-bottom: var(--vt-space-4); border-bottom: 1px solid var(--vt-border); }
+.app-stage .agent-panel .agent-inspector > :not(summary) { margin-inline: var(--vt-space-4); }
+.app-stage .agent-panel .agent-meta-block {
+  padding: var(--vt-space-4);
+  border: 1px solid var(--vt-border) !important;
+  border-radius: var(--vt-radius-control);
+  background: var(--vt-bg) !important;
+  box-shadow: none !important;
+}
+.app-stage .agent-panel .meta-label { color: var(--vt-text) !important; font-size: 13px; }
+.app-stage .agent-panel .stage-list span,
+.app-stage .agent-panel .quality-row span {
+  min-height: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--vt-border) !important;
+  border-radius: var(--vt-radius-sm) !important;
+  background: var(--vt-surface) !important;
+  box-shadow: none !important;
+  color: var(--vt-text-muted) !important;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.app-stage .agent-panel .quality-row { margin-bottom: var(--vt-space-4); }
+.app-stage .agent-panel .tool-call-item {
+  flex-wrap: wrap;
+  gap: var(--vt-space-2);
+  border-radius: var(--vt-radius-sm);
+  background: var(--vt-surface) !important;
+  box-shadow: none !important;
+}
+.app-stage .agent-panel .tool-call-item code { min-width: 0; font: 13px/20px var(--vt-font-mono); color: var(--vt-text) !important; }
+.app-stage .agent-panel .tool-call-item span { margin-left: auto; font-size: 13px; font-variant-numeric: tabular-nums; }
+.app-stage .agent-panel .tool-call-item .is-success { color: var(--vt-success); }
+.app-stage .agent-panel .tool-call-item .is-failed { color: var(--vt-danger); }
+
+.app-stage .agent-panel .agent-footer {
+  flex: 0 0 auto;
+  max-height: 42%;
+  overflow-y: auto;
+  padding: var(--vt-space-4) var(--vt-space-8);
+  padding-bottom: max(var(--vt-space-4), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--vt-border);
+  background: var(--vt-surface);
+}
+.app-stage .agent-panel .follow-up-label { display: block; margin-bottom: var(--vt-space-2); color: var(--vt-text); font-size: 14px; font-weight: 600; }
+.app-stage .agent-panel .follow-up-box { margin: 0; grid-template-columns: minmax(0, 1fr) auto; gap: var(--vt-space-3); }
+.app-stage .agent-panel .follow-up-box textarea {
+  min-width: 0;
+  height: 88px;
+  min-height: 88px;
+  max-height: 160px;
+  resize: vertical;
+  border: 1px solid var(--vt-control-border) !important;
+  border-radius: var(--vt-radius-control) !important;
+  padding: var(--vt-space-3);
+  background: var(--vt-surface) !important;
+  box-shadow: none !important;
+  font: 16px/1.6 var(--vt-font-sans);
+  color: var(--vt-text) !important;
+}
+.app-stage .agent-panel .follow-up-box button,
+.app-stage .agent-panel .agent-run-btn {
+  min-height: 44px;
+  border-radius: var(--vt-radius-control) !important;
+  background: var(--vt-brand) !important;
+  box-shadow: none !important;
+  color: var(--vt-surface) !important;
+  transition: background var(--vt-motion-feedback) ease !important;
+}
+.app-stage .agent-panel .follow-up-box button { align-self: end; min-width: 80px; padding: 0 var(--vt-space-4); }
+.app-stage .agent-panel :is(.follow-up-box button, .agent-run-btn):hover:not(:disabled) { background: var(--vt-brand-hover) !important; transform: none; }
+.app-stage .agent-panel :is(.follow-up-box button, .agent-run-btn):active:not(:disabled) { background: var(--vt-brand-pressed) !important; transform: none; }
+.app-stage .agent-panel .agent-composer textarea { font-size: 16px; }
+.app-stage .agent-panel .feedback-row { margin-block: var(--vt-space-6) var(--vt-space-2); }
+.app-stage .agent-panel :is(.feedback-row button, .goal-presets button) { border: 1px solid var(--vt-border) !important; border-radius: var(--vt-radius-control) !important; background: var(--vt-surface) !important; box-shadow: none !important; }
+.app-stage .agent-panel :is(button, textarea, a, summary):focus-visible {
+  outline: 2px solid var(--vt-brand) !important;
+  outline-offset: 2px;
+  box-shadow: none !important;
+}
+
+@media (max-width: 767px) {
+  .app-stage .sidebar-panel.agent-panel { width: 100% !important; max-width: 100%; border-radius: 0 !important; }
+  .app-stage .agent-panel .sidebar-header { min-height: 72px; padding: var(--vt-space-3) var(--vt-space-4) !important; }
+  .app-stage .agent-panel .sidebar-title { font-size: 16px !important; line-height: 24px; }
+  .app-stage .agent-panel .sidebar-body { padding: var(--vt-space-5) var(--vt-space-4) !important; }
+  .app-stage .agent-panel .agent-footer { padding-inline: var(--vt-space-4); }
+  .app-stage .agent-panel .follow-up-box { grid-template-columns: minmax(0, 1fr) auto !important; }
+  .app-stage .agent-panel .follow-up-box button { min-width: 64px; width: auto; min-height: 44px; padding-inline: var(--vt-space-3); }
+  .app-stage .agent-panel .agent-inspector-summary span { display: block; margin: var(--vt-space-1) 0 0; }
+}

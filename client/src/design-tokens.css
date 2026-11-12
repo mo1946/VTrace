@@ -1,0 +1,39 @@
+/* VTrace workspace foundation. Existing surfaces opt in module by module. */
+:root {
+  --vt-brand: #6267d9;
+  --vt-brand-hover: #5156c6;
+  --vt-brand-pressed: #454ab5;
+  --vt-brand-subtle: #eef0ff;
+  --vt-brand-text: #4f46b4;
+  --vt-bg: #f8fafc;
+  --vt-surface: #ffffff;
+  --vt-surface-muted: #f1f5f9;
+  --vt-text: #20283a;
+  --vt-text-muted: #5e6c82;
+  --vt-border: #e2e8f0;
+  --vt-control-border: #8592a6;
+  --vt-success: #17664f;
+  --vt-success-bg: #eaf7f0;
+  --vt-warning: #8a5a12;
+  --vt-warning-bg: #fff7e6;
+  --vt-danger: #b4233c;
+  --vt-danger-bg: #fff1f3;
+  --vt-font-sans: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --vt-font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  --vt-space-1: 4px;
+  --vt-space-2: 8px;
+  --vt-space-3: 12px;
+  --vt-space-4: 16px;
+  --vt-space-5: 20px;
+  --vt-space-6: 24px;
+  --vt-space-8: 32px;
+  --vt-space-10: 40px;
+  --vt-space-12: 48px;
+  --vt-radius-sm: 6px;
+  --vt-radius-control: 8px;
+  --vt-radius-card: 12px;
+  --vt-radius-panel: 16px;
+  --vt-shadow-card: 0 1px 2px rgba(15, 23, 42, .04);
+  --vt-shadow-panel: -12px 0 36px rgba(15, 23, 42, .12);
+  --vt-motion-feedback: 140ms;
+}

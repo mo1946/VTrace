@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { apiBaseFor, queuedMessage } from '../src/apiRouting.js'
-import { apiRequest, setAuthToken, hasAuthToken } from '../src/api.js'
+import { apiJson, apiRequest, setAuthToken, hasAuthToken } from '../src/api.js'
 
 test('only task creation and ID status route to Java', () => {
   assert.equal(apiBaseFor('/analysis/ai?id=1&goal=test'), '/business-api')
@@ -78,5 +78,40 @@ test('409 and PENDING responses are returned intact without retrying', async () 
       assert.deepEqual(await response.json(), body)
     }
     assert.equal(calls, 2)
+  } finally { globalThis.fetch = oldFetch }
+})
+
+test('auth preserves business errors and explains offline proxy responses', async () => {
+  const oldFetch = globalThis.fetch
+  try {
+    for (const [response, expected] of [
+      [new Response(null, { status: 500 }), /后端服务暂不可用/],
+      [new Response('<html>Bad Gateway</html>', { status: 502 }), /后端服务暂不可用/],
+      [Response.json({ message: '账号或密码错误' }, { status: 401 }), /账号或密码错误/],
+      [Response.json({ message: '该账号已存在' }, { status: 409 }), /该账号已存在/],
+      [Response.json({ detail: [{ msg: '密码长度不足' }] }, { status: 422 }), /密码长度不足/],
+      [new Response('<html>frontend fallback</html>'), /服务器响应格式异常/]
+    ]) {
+      globalThis.fetch = async () => response
+      await assert.rejects(apiJson('/user/login', { method: 'POST' }), expected)
+    }
+    globalThis.fetch = async () => { throw new TypeError('Failed to fetch') }
+    await assert.rejects(apiJson('/user/register', { method: 'POST' }), /无法连接服务/)
+    globalThis.fetch = async () => Response.json({ code: 200, token: 'valid-token' })
+    assert.deepEqual(await apiJson('/user/login', { method: 'POST' }), { code: 200, token: 'valid-token' })
+  } finally { globalThis.fetch = oldFetch }
+})
+
+test('follow-up decodes JSON answers and exposes prerequisite errors as readable text', async () => {
+  const oldFetch = globalThis.fetch
+  try {
+    globalThis.fetch = async (url, options) => {
+      assert.equal(url, '/api/analysis/follow-up?id=1&question=test')
+      assert.equal(options.method, 'POST')
+      return Response.json('基于视频证据的回答')
+    }
+    assert.equal(await apiJson('/analysis/follow-up?id=1&question=test', { method: 'POST' }), '基于视频证据的回答')
+    globalThis.fetch = async () => Response.json({ detail: '请先完成视频分析' }, { status: 409 })
+    await assert.rejects(apiJson('/analysis/follow-up?id=1&question=test', { method: 'POST' }), /^Error: 请先完成视频分析$/)
   } finally { globalThis.fetch = oldFetch }
 })

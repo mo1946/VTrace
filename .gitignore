@@ -1,4 +1,7 @@
 .idea/
+/.agents/
+/.codex/
+/.aws/
 *.iml
 .env
 .env.*
@@ -9,6 +12,13 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.log
+.cache/
+/models/
 data/
 node_modules/
 dist/

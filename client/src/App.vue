@@ -35,10 +35,14 @@
     </header>
 
     <main class="main-container">
-      <section class="hero-section">
+      <header class="workspace-heading">
         <h1 class="slogan-main"><span>VTrace</span><strong>AI</strong></h1>
         <p class="slogan-sub">视频内容工作台</p>
+      </header>
 
+      <div class="home-workspace">
+      <section class="hero-section" aria-label="视频导入">
+        <div class="section-header"><h2>添加视频</h2></div>
         <div class="source-switch" role="tablist" aria-label="视频来源">
           <button
               class="source-switch-btn"
@@ -92,8 +96,24 @@
             </div>
 
             <div class="magnet-content busy" v-else>
-              <div class="quantum-loader"></div>
-              <span class="busy-text">正在建立通道并解析资源...</span>
+              <div class="upload-status">
+                <div class="magnet-icon" aria-hidden="true">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                </div>
+                <p class="upload-status-title" role="status">{{ uploadDisplay.title }}</p>
+                <div v-if="uploadDisplay.progress" class="upload-transfer-progress">
+                  <div class="upload-progress-caption">
+                    <span>{{ uploadDisplay.progress.current }}/{{ uploadDisplay.progress.total }} 分片</span>
+                    <span>{{ uploadDisplay.progress.percent }}%</span>
+                  </div>
+                  <progress class="upload-chunk-progress" :value="uploadDisplay.progress.current" :max="uploadDisplay.progress.total" :aria-label="`已完成 ${uploadDisplay.progress.current}/${uploadDisplay.progress.total} 分片`"></progress>
+                </div>
+                <div v-else class="upload-pending">
+                  <span class="quantum-loader" aria-hidden="true"></span>
+                  <span>{{ uploadDisplay.detail }}</span>
+                </div>
+                <p class="upload-status-note">{{ uploadDisplay.note }}</p>
+              </div>
             </div>
 
             <div class="border-glow"></div>
@@ -151,15 +171,15 @@
           </div>
         </div>
         <transition name="toast-pop">
-          <div v-if="message" class="notification-bar" :class="{ 'error': message.startsWith('❌') || message.startsWith('⚠️') }">
+          <div v-if="message && !(uploading && sourceMode === 'local')" class="notification-bar" :class="{ 'error': message.startsWith('❌') || message.startsWith('⚠️') }">
             {{ message }}
           </div>
         </transition>
       </section>
 
-      <section v-if="list.length > 0" class="workspace-section">
+      <section class="workspace-section" aria-label="视频任务">
         <div class="section-header"><h3>视频任务</h3><div class="count-chip">{{ list.length }}</div></div>
-        <div class="card-grid">
+        <div v-if="list.length > 0" class="card-grid">
           <div v-for="item in list" :key="item.id" class="project-card">
 
             <button class="delete-btn" @click.stop="deleteItem(item)" title="删除此项">
@@ -233,10 +253,16 @@
             </div>
           </div>
         </div>
+        <div v-else class="workspace-empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 9 5 3-5 3V9Z"/></svg>
+          <h4>暂无视频任务</h4>
+          <p>上传本地视频或导入 BV 视频后，任务会显示在这里。</p>
+        </div>
       </section>
+      </div>
 
       <div class="sidebar-backdrop" v-if="sidebar.visible" @click="closeSidebar"></div>
-      <div class="sidebar-panel" :class="{ 'is-open': sidebar.visible }">
+      <div class="sidebar-panel" :class="{ 'is-open': sidebar.visible, 'agent-panel': sidebar.type === 'ai' }">
         <div class="sidebar-header">
           <div class="sidebar-title">
             <span class="icon" v-if="sidebar.type === 'ai'">
@@ -247,7 +273,7 @@
             </span>
             {{ sidebar.title }}
           </div>
-          <button class="close-btn" @click="closeSidebar">×</button>
+          <button class="close-btn" @click="closeSidebar" aria-label="关闭侧栏">×</button>
         </div>
         <div ref="sidebarBodyRef" class="sidebar-body">
           <div v-if="sidebar.type === 'ai' && sidebar.mode === 'compose'" class="agent-composer">
@@ -296,7 +322,8 @@
                   <div class="markdown-content conversation-answer" v-html="renderMarkdown(turn.answer)"></div>
                 </article>
               </section>
-              <div v-if="sidebar.plan?.tasks?.length || traceStages.length || traceToolCalls.length" class="agent-inspector">
+              <details v-if="sidebar.plan?.tasks?.length || traceStages.length || traceToolCalls.length || sidebar.trace?.graph" class="agent-inspector">
+                <summary class="agent-inspector-summary">执行详情<span>计划、轨迹与工具调用</span></summary>
                 <div v-if="sidebar.plan?.tasks?.length" class="agent-meta-block">
                   <span class="meta-label">Planner 任务</span>
                   <ol><li v-for="task in sidebar.plan.tasks" :key="task">{{ task }}</li></ol>
@@ -306,7 +333,7 @@
                   <div class="stage-list"><span v-for="stage in traceStages" :key="stage[0]">{{ stage[0] }} · {{ stage[1] }}ms</span></div>
                 </div>
                 <div v-if="sidebar.trace?.graph" class="agent-meta-block">
-                  <span class="meta-label">状态图 · {{ sidebar.trace.graph.framework }}</span>
+                  <span class="meta-label">执行状态 · {{ sidebar.trace.graph.framework }}</span>
                   <div class="stage-list">
                     <span>意图 {{ sidebar.trace.graph.intent }}</span>
                     <span>执行 {{ sidebar.trace.graph.steps }}/{{ sidebar.trace.graph.maxSteps }} 步</span>
@@ -332,13 +359,7 @@
                   <span class="meta-label">短期记忆 · {{ sidebar.memory.sessionCount || 1 }} 个会话 · {{ sidebar.followUps?.length || 0 }} 轮追问</span>
                   <div class="stage-list"><span>{{ sidebar.memory.goal }}</span></div>
                 </div>
-              </div>
-              <div class="follow-up-box">
-                <textarea v-model="sidebar.followUp" maxlength="500" placeholder="基于视频继续追问..."></textarea>
-                <button :disabled="sidebar.followUpLoading || !sidebar.followUp.trim()" @click="submitFollowUp">
-                  {{ sidebar.followUpLoading ? '分析中' : '追问' }}
-                </button>
-              </div>
+              </details>
               <div class="feedback-row">
                 <span>这个结果有帮助吗？</span>
                 <button :class="{ active: sidebar.feedback === 1 }" @click="sendFeedback(1)" title="有帮助">赞</button>
@@ -346,6 +367,15 @@
               </div>
             </div>
             <div v-else class="text-content"><pre>{{ sidebar.content }}</pre></div>
+          </div>
+        </div>
+        <div v-if="sidebar.type === 'ai' && sidebar.mode !== 'compose' && !sidebar.loading" class="agent-footer">
+          <label class="follow-up-label" for="agent-follow-up">继续追问</label>
+          <div class="follow-up-box">
+            <textarea id="agent-follow-up" v-model="sidebar.followUp" maxlength="500" placeholder="基于视频继续追问..."></textarea>
+            <button :disabled="sidebar.followUpLoading || !sidebar.followUp.trim()" @click="submitFollowUp">
+              {{ sidebar.followUpLoading ? '分析中' : '追问' }}
+            </button>
           </div>
         </div>
       </div>
@@ -390,7 +420,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { marked } from 'marked'
-import { apiRequest, clearAuthToken, hasAuthToken, setAuthToken } from './api'
+import { apiJson, apiRequest, clearAuthToken, hasAuthToken, setAuthToken } from './api'
 import { queuedMessage } from './apiRouting.js'
 import { uploadChunkWithRetry } from './uploadChunks.js'
 import { DEMO_EVALUATION, DEMO_ITEM, DEMO_PLAN, DEMO_RESULT, DEMO_TRACE } from './demoData'
@@ -409,6 +439,25 @@ const biliTask = ref(null)
 const biliPollTimer = ref(null)
 const message = ref('')
 const uploading = ref(false)
+// Presentation only: read the existing upload messages without changing upload state.
+const uploadDisplay = computed(() => {
+  const match = /^正在上传分片 (\d+)\/(\d+)\.\.\.$/.exec(message.value)
+  if (match) {
+    const current = Number(match[1])
+    const total = Number(match[2])
+    if (Number.isSafeInteger(current) && Number.isSafeInteger(total) && total > 0 && current >= 0 && current <= total) {
+      return {
+        title: '正在上传视频',
+        progress: { current, total, percent: Math.floor(current / total * 100) },
+        note: '仅表示分片传输进度，完成后还需合并和校验视频。'
+      }
+    }
+  }
+  if (message.value === '分片上传完成，正在合并文件...') {
+    return { title: '正在合并并校验资源', progress: null, detail: '正在等待服务器返回合并结果', note: '分片已传输完成，文件就绪后将加入视频任务列表。' }
+  }
+  return { title: '正在准备上传', progress: null, detail: '正在建立连接或确认可续传分片', note: '取得可靠的分片完成数据后，将在这里显示上传进度。' }
+})
 const list = ref([])
 const isDragOver = ref(false)
 const sidebar = ref({
@@ -928,7 +977,9 @@ const aiAnalyze = async (id, goal) => {
     let payload = {}
     try { payload = text ? JSON.parse(text) : {} } catch (_) {}
     if (!res.ok && !(res.status === 409 && payload.taskId)) {
-      const errorMessage = payload.detail || payload.message || text || '分析任务提交失败'
+      const errorMessage = payload.detail || payload.message || text || (res.status >= 500
+        ? '分析服务不可用，请检查当前分析后端配置与服务是否已启动'
+        : '分析任务提交失败')
       showMsg(errorMessage, true)
       sidebar.value.loading = false
       sidebar.value.taskState = 'FAILED'
@@ -1277,7 +1328,11 @@ const refreshAgentMeta = async (id, goal, includeEvaluation) => {
 
 const submitFollowUp = async () => {
   const question = sidebar.value.followUp.trim()
-  if (!question) return
+  if (!question || sidebar.value.followUpLoading) return
+  if (sidebar.value.taskState === 'FAILED') {
+    showMsg('请先重新运行并完成视频分析，再继续追问', true)
+    return
+  }
   if (DEMO_MODE) {
     sidebar.value.followUps.push({
       id: `demo-${Date.now()}`,
@@ -1292,14 +1347,8 @@ const submitFollowUp = async () => {
   sidebar.value.followUpLoading = true
   try {
     const params = new URLSearchParams({ id: String(sidebar.value.mediaId), question })
-    const res = await apiRequest(`/analysis/follow-up?${params}`, { method: 'POST' })
-    const rawAnswer = await res.text()
-    if (!res.ok) throw new Error(rawAnswer || '追问失败')
-    let answer = rawAnswer
-    try {
-      const parsed = JSON.parse(rawAnswer)
-      if (typeof parsed === 'string') answer = parsed
-    } catch (_) {}
+    const answer = await apiJson(`/analysis/follow-up?${params}`, { method: 'POST', timeoutMs: 210000 })
+    if (typeof answer !== 'string' || !answer.trim()) throw new Error('追问未返回有效回答，请稍后重试')
     sidebar.value.followUps.push({
       id: `follow-up-${Date.now()}`,
       goal: sidebar.value.goal,
@@ -1381,17 +1430,17 @@ const handleAuth = async () => {
   authMessage.value = ''
   const endpoint = authMode.value === 'login' ? '/user/login' : '/user/register'
   try {
-    const res = await apiRequest(endpoint, {
+    const data = await apiJson(endpoint, {
       method: 'POST',
+      timeoutMs: 15000,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(authForm.value)
     })
-    const data = await res.json()
     if (data.code === 200) {
       if (authMode.value === 'login') {
+        setAuthToken(data.token)
         currentUser.value = data.userInfo
         localStorage.setItem('user', JSON.stringify(data.userInfo))
-        setAuthToken(data.token)
         closeAuthModal()
         showMsg(`欢迎回来，${data.userInfo.nickname}`)
         fetchList()
@@ -1407,7 +1456,7 @@ const handleAuth = async () => {
     }
   } catch (e) {
     console.error(e)
-    authMessage.value = '网络连接错误'
+    authMessage.value = e.message || '登录服务暂不可用，请稍后重试'
     authError.value = true
   } finally {
     authLoading.value = false

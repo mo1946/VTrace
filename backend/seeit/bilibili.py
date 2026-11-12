@@ -26,6 +26,31 @@ class BilibiliImportError(RuntimeError):
     pass
 
 
+class BilibiliNetworkPermissionError(BilibiliImportError):
+    def __init__(self) -> None:
+        super().__init__(
+            "本地后端的外网连接被系统或运行环境拒绝（WinError 10013）。"
+            "请从本机终端重新启动后端，并确认后端进程允许访问外网。"
+        )
+
+
+def _network_permission_denied(error: BaseException) -> bool:
+    """HTTPX/yt-dlp may wrap the original Windows socket error."""
+    visited: set[int] = set()
+    pending = [error]
+    while pending:
+        current = pending.pop()
+        if id(current) in visited:
+            continue
+        visited.add(id(current))
+        if getattr(current, "winerror", None) == 10013 or "WinError 10013" in str(current):
+            return True
+        for cause in (current.__cause__, current.__context__):
+            if cause is not None:
+                pending.append(cause)
+    return False
+
+
 @dataclass(frozen=True)
 class DownloadedVideo:
     bvid: str
@@ -88,6 +113,8 @@ def _api_payload(path: str, params: dict[str, Any]) -> dict[str, Any]:
         response.raise_for_status()
         payload = response.json()
     except (httpx.HTTPError, ValueError, TypeError) as exc:
+        if _network_permission_denied(exc):
+            raise BilibiliNetworkPermissionError() from exc
         raise BilibiliImportError("B 站公开接口暂时不可用") from exc
     if not isinstance(payload, dict) or payload.get("code") != 0:
         message = str(payload.get("message") or "未知错误") if isinstance(payload, dict) else "响应格式异常"
@@ -121,12 +148,17 @@ def fetch_bilibili_metadata(value: str) -> dict[str, Any]:
     bvid = normalize_bvid(value)
     try:
         return _metadata_from_view(_view_info(bvid), bvid)
+    except BilibiliNetworkPermissionError:
+        # A second extractor cannot fix the process's denied network access.
+        raise
     except BilibiliImportError as api_error:
         fallback_error = api_error
     try:
         with yt_dlp.YoutubeDL({**_options(), "skip_download": True}) as downloader:
             info = downloader.extract_info(bilibili_video_url(bvid), download=False)
     except yt_dlp.utils.DownloadError as exc:
+        if _network_permission_denied(exc):
+            raise BilibiliNetworkPermissionError() from exc
         raise BilibiliImportError(
             "无法读取该公开视频；B 站公开接口和网页解析均失败，请稍后重试"
         ) from exc
@@ -149,6 +181,8 @@ def _download_stream(url: str, destination: Path) -> None:
                 for chunk in response.iter_bytes(1024 * 1024):
                     output.write(chunk)
     except (httpx.HTTPError, OSError) as exc:
+        if _network_permission_denied(exc):
+            raise BilibiliNetworkPermissionError() from exc
         raise BilibiliImportError("B 站视频流下载失败") from exc
 
 
@@ -282,7 +316,9 @@ def download_bilibili_video(value: str, directory: Path) -> DownloadedVideo:
     try:
         with yt_dlp.YoutubeDL(options) as downloader:
             info = downloader.extract_info(bilibili_video_url(bvid), download=True)
-    except yt_dlp.utils.DownloadError:
+    except yt_dlp.utils.DownloadError as exc:
+        if _network_permission_denied(exc):
+            raise BilibiliNetworkPermissionError() from exc
         return _download_via_public_api(bvid, directory)
 
     candidates = [

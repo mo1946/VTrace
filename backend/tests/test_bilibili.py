@@ -3,8 +3,59 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import httpx
 
 from seeit import bilibili
+
+
+def test_socket_permission_error_does_not_try_webpage_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    def blocked_get(*args, **kwargs):
+        original = OSError("socket access denied")
+        original.winerror = 10013
+        raise httpx.ConnectError("connection failed") from original
+
+    monkeypatch.setattr(bilibili.httpx, "get", blocked_get)
+
+    def unexpected_extractor(*args, **kwargs):
+        raise AssertionError("A denied socket must not be reported as a Bilibili outage")
+
+    monkeypatch.setattr(bilibili.yt_dlp, "YoutubeDL", unexpected_extractor)
+    with pytest.raises(bilibili.BilibiliNetworkPermissionError, match="本机终端"):
+        bilibili.fetch_bilibili_metadata("BV1wMduBNEPS")
+
+
+@pytest.mark.parametrize("download", [False, True])
+def test_extractor_socket_permission_error_is_actionable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, download: bool) -> None:
+    monkeypatch.setattr(bilibili, "_view_info", lambda _: (_ for _ in ()).throw(bilibili.BilibiliImportError("API unavailable")))
+
+    class BlockedYoutubeDL:
+        def __init__(self, options):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def extract_info(self, *args, **kwargs):
+            raise bilibili.yt_dlp.utils.DownloadError("transport failed: [WinError 10013] access denied")
+
+    monkeypatch.setattr(bilibili.yt_dlp, "YoutubeDL", BlockedYoutubeDL)
+    with pytest.raises(bilibili.BilibiliNetworkPermissionError, match="10013"):
+        if download:
+            bilibili.download_bilibili_video("BV1wMduBNEPS", tmp_path)
+        else:
+            bilibili.fetch_bilibili_metadata("BV1wMduBNEPS")
+
+
+def test_stream_socket_permission_error_is_actionable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def blocked_stream(*args, **kwargs):
+        raise httpx.ConnectError("[WinError 10013] access denied")
+
+    monkeypatch.setattr(bilibili.httpx, "stream", blocked_stream)
+    with pytest.raises(bilibili.BilibiliNetworkPermissionError, match="外网连接"):
+        bilibili._download_stream("https://example.com/video", tmp_path / "video.m4s")
 
 
 def _view_payload() -> dict:

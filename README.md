@@ -18,7 +18,7 @@
 
 | 模块 | 核心技术 | 职责 |
 | --- | --- | --- |
-| 前端 | Vue 3、Vite（rolldown-vite）、Axios、Marked | 上传、任务交互、进度轮询、报告与对话展示 |
+| 前端 | Vue 3、Vite（rolldown-vite）、Fetch、Marked | 上传、任务交互、进度轮询、报告与对话展示 |
 | Java 后端 | Java 21、Spring Boot 3.5、MyBatis、Spring Data Redis | 任务创建、权限校验、事务持久化、消息投递、按任务 ID 查询状态与报告 |
 | Python 后端 | FastAPI、Uvicorn、SQLAlchemy、Alembic | 用户认证、视频接入、AI 接口、会话管理和数据库迁移 |
 | 数据与消息 | MySQL、Redis、RocketMQ 4.9.4 | 业务持久化、防重与限流、异步任务传递 |
@@ -107,6 +107,14 @@ VTrace/
 ## 本地快速启动
 
 推荐使用 Compose 启动基础设施与后端，在宿主机运行 Vue 开发服务器。
+
+Windows 下也可使用无需 Docker 的本地 Python 演示模式。已有根目录 `.venv`（已安装后端依赖）和 `client/node_modules` 时，可在项目根目录运行：
+
+```powershell
+.\.venv\Scripts\python.exe .\start_local.py
+```
+
+脚本同时启动 Python API 和 Vue，检查服务就绪后输出 `http://127.0.0.1:5173/`；日志位于 `data/local-dev/`，数据库和上传路径沿用现有配置（默认 `backend/seeit.db` 与 `backend/data/uploads`）。该启动方式将前端分析后端显式设为 Python，无需启动 Java 即可提交分析和查询任务状态；真实分析仍需配置 `.env` 中的模型和 ASR/OCR 依赖。若复用已经运行的 Vue 服务，请在 `client/.env.local` 设置 `VITE_ANALYSIS_BACKEND=python` 并重启 Vite，避免分析请求发往未启动的 Java 服务。生产环境的默认 Java 路由保持不变。已有账号仅在其原数据库下有效；`?demo` 仅供界面演示，真实上传请使用不带该参数的地址。
 
 ### 1. 准备环境
 
@@ -277,6 +285,19 @@ npm run build
 ```
 
 Java 的 MySQL/Redis 集成项、Python 的外部 Qdrant 集成项和前端链路测试需要额外环境；条件未配置时部分测试会跳过。单元测试通过不能代替真实消息链路验收。
+
+### UI/UX 与当前验收状态
+
+主页采用上下布局，视频任务在桌面、平板和手机端分别以三列、两列和一列排列；Video Agent 抽屉采用固定标题、独立滚动正文和固定追问区，执行详情可折叠。界面使用蓝紫色 Design Tokens，Markdown 保留现有 HTML 标签、属性与链接协议过滤。
+
+2026-11-12 的[综合验收报告](./docs/UI_UX_FINAL_ACCEPTANCE.md)分别记录了演示数据、隔离测试和真实联调：
+
+- 前端测试 13 项通过、2 项跳过；后端现有测试 118 项通过、3 项跳过；前端构建通过。
+- 浏览器展示数据的 152 项布局断言通过；经授权完成真实上传续传、音频下载、文字提取、BV 导入、一个分析任务、报告恢复和两轮追问，共 18 项业务检查。
+- 本次真实分析的短片证据不足，生成了拒答报告；不据此宣称长视频总结或引用准确率已经验收通过。Java/MQ 生产链路、真机、真实断网和长稳测试仍有未验证项。
+- 已知问题尚未修复：抽屉焦点管理、本地上传入口的键盘访问、部分 LangGraph 结果的空步数展示，以及手机端极长抽屉标题占位。当前结论为有条件本地演示，不是全项正式验收通过。
+
+验收截图、日志、测试账号和本地数据库不随仓库发布；报告中的本地证据路径仅用于说明验收过程。`.agents/` 是本地开发辅助目录，不属于项目运行所需的 [skills/](./skills/) 场景 Skill。
 
 ### 跨语言链路与异常测试
 
